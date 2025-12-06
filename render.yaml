@@ -5,7 +5,7 @@ services:
     env: docker
     plan: free
     branch: main
-    repo: https://github.com/your-username/your-repo # Update this if needed, or Render will auto-detect
+    repo: https://github.com/anastasiosv/codeInterviewHQ # Update this if needed, or Render will auto-detect
     envVars:
       - key: DATABASE_URL
         fromDatabase:
