@@ -23,6 +23,8 @@ export function useWebSocket({
   const [myParticipantId, setMyParticipantId] = useState<string | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const isMounted = useRef(true);
+
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
@@ -31,6 +33,10 @@ export function useWebSocket({
     const socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
+      if (!isMounted.current) {
+        socket.close();
+        return;
+      }
       setIsConnected(true);
       // Join the session
       const joinMessage: WsMessage = {
@@ -42,6 +48,7 @@ export function useWebSocket({
     };
 
     socket.onmessage = (event) => {
+      if (!isMounted.current) return;
       try {
         const message = JSON.parse(event.data) as WsMessage;
 
@@ -103,10 +110,13 @@ export function useWebSocket({
     };
 
     socket.onclose = () => {
+      if (!isMounted.current) return;
       setIsConnected(false);
       // Attempt to reconnect after 2 seconds
       reconnectTimeoutRef.current = setTimeout(() => {
-        connect();
+        if (isMounted.current) {
+          connect();
+        }
       }, 2000);
     };
 
@@ -118,9 +128,11 @@ export function useWebSocket({
   }, [sessionId, userName, onCodeUpdate, onLanguageChange, onParticipantsChange, onError]);
 
   useEffect(() => {
+    isMounted.current = true;
     connect();
 
     return () => {
+      isMounted.current = false;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }

@@ -5,6 +5,60 @@ interface ExecutionResult {
   error: boolean;
 }
 
+declare global {
+  interface Window {
+    loadPyodide: any;
+    pyodide: any;
+  }
+}
+
+let pyodideInstance: any = null;
+
+async function getPyodide() {
+  if (pyodideInstance) return pyodideInstance;
+
+  if (!window.loadPyodide) {
+    throw new Error("Pyodide script not loaded");
+  }
+
+  pyodideInstance = await window.loadPyodide();
+  return pyodideInstance;
+}
+
+export function resetPyodideInstance() {
+  pyodideInstance = null;
+}
+
+// Execute Python code using Pyodide
+async function executePython(code: string): Promise<ExecutionResult> {
+  try {
+    const pyodide = await getPyodide();
+
+    // Redirect stdout to capture output
+    pyodide.runPython(`
+      import sys
+      import io
+      sys.stdout = io.StringIO()
+      sys.stderr = io.StringIO()
+    `);
+
+    await pyodide.runPythonAsync(code);
+
+    const stdout = pyodide.runPython("sys.stdout.getvalue()");
+    const stderr = pyodide.runPython("sys.stderr.getvalue()");
+
+    return {
+      output: (stdout + stderr).trim() || "(No output)",
+      error: !!stderr,
+    };
+  } catch (err: any) {
+    return {
+      output: err.message || String(err),
+      error: true,
+    };
+  }
+}
+
 // Execute JavaScript code safely in a sandboxed iframe using srcdoc
 export async function executeJavaScript(code: string): Promise<ExecutionResult> {
   return new Promise((resolve) => {
@@ -17,9 +71,9 @@ export async function executeJavaScript(code: string): Promise<ExecutionResult> 
     const messageHandler = (event: MessageEvent) => {
       // Only accept messages from our iframe
       if (!iframe || event.source !== iframe.contentWindow) return;
-      
+
       const { type, data } = event.data || {};
-      
+
       if (type === "log") {
         logs.push(data);
       } else if (type === "error") {
@@ -126,23 +180,24 @@ export async function executeJavaScript(code: string): Promise<ExecutionResult> 
 export async function executeCode(code: string, language: string): Promise<ExecutionResult> {
   if (language === "javascript") {
     return executeJavaScript(code);
+  } else if (language === "python") {
+    return executePython(code);
   }
-  
-  // For non-JavaScript languages, show a helpful message
+
+  // For non-JavaScript/Python languages, show a helpful message
   const languageNames: Record<string, string> = {
     typescript: "TypeScript",
-    python: "Python",
     java: "Java",
     cpp: "C++",
     csharp: "C#",
     go: "Go",
     rust: "Rust",
   };
-  
+
   const langName = languageNames[language] || language;
-  
+
   return {
-    output: `Browser-based execution is only available for JavaScript.\n\n${langName} code would need to be compiled/run in a server environment.\n\nFor interview purposes, discuss the code logic with your candidate.`,
+    output: `Browser-based execution is currently only available for JavaScript and Python.\n\n${langName} code would need to be compiled/run in a server environment.\n\nFor interview purposes, discuss the code logic with your candidate.`,
     error: false,
   };
 }

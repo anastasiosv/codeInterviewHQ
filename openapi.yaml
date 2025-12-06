@@ -1,0 +1,366 @@
+openapi: 3.0.3
+info:
+  title: CodeInterviewHQ API
+  description: |
+    Real-time collaborative coding interview platform API.
+    Supports session management and WebSocket-based real-time collaboration.
+  version: 1.0.0
+  contact:
+    name: CodeInterviewHQ
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+  - url: http://localhost
+    description: Docker deployment
+
+tags:
+  - name: sessions
+    description: Session management operations
+  - name: websocket
+    description: Real-time collaboration via WebSocket
+
+paths:
+  /api/sessions:
+    post:
+      tags:
+        - sessions
+      summary: Create or get a session
+      description: Creates a new session with the given ID or returns existing session
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: string
+                  description: Unique session identifier
+                  example: "interview-123"
+      responses:
+        '200':
+          description: Session created or retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          description: Bad request - missing or invalid session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/sessions/{id}:
+    get:
+      tags:
+        - sessions
+      summary: Get session details
+      description: Retrieves session information by ID
+      operationId: getSession
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Session ID
+          schema:
+            type: string
+          example: "interview-123"
+      responses:
+        '200':
+          description: Session found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ws:
+    get:
+      tags:
+        - websocket
+      summary: WebSocket endpoint for real-time collaboration
+      description: |
+        WebSocket connection for real-time code collaboration.
+        
+        **Message Types:**
+        
+        Client → Server:
+        - `join`: Join a session
+        - `code_update`: Update code in session
+        - `language_change`: Change programming language
+        - `cursor_update`: Update cursor position
+        
+        Server → Client:
+        - `session_state`: Initial session state after joining
+        - `participant_joined`: New participant joined
+        - `participant_left`: Participant left
+        - `participant_cursor`: Participant cursor moved
+        - `code_update`: Code was updated
+        - `language_change`: Language was changed
+        - `error`: Error message
+      responses:
+        '101':
+          description: Switching Protocols - WebSocket connection established
+        '400':
+          description: Bad request - invalid WebSocket upgrade
+        '500':
+          description: Internal server error
+
+components:
+  schemas:
+    Session:
+      type: object
+      required:
+        - id
+        - code
+        - language
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Unique session identifier
+          example: "interview-123"
+        code:
+          type: string
+          description: Current code in the session
+          example: "function solution(input) {\n  return input;\n}"
+        language:
+          type: string
+          enum:
+            - javascript
+            - typescript
+            - python
+            - java
+            - cpp
+            - csharp
+            - go
+            - rust
+          description: Programming language
+          example: "javascript"
+        createdAt:
+          type: integer
+          format: int64
+          description: Unix timestamp of session creation
+          example: 1701360000000
+
+    Participant:
+      type: object
+      required:
+        - id
+        - sessionId
+        - name
+        - color
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique participant identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        sessionId:
+          type: string
+          description: Session this participant belongs to
+          example: "interview-123"
+        name:
+          type: string
+          description: Participant display name
+          example: "John Doe"
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          description: Hex color for participant identification
+          example: "#3B82F6"
+        cursorLine:
+          type: integer
+          nullable: true
+          description: Current cursor line position
+          example: 5
+        cursorColumn:
+          type: integer
+          nullable: true
+          description: Current cursor column position
+          example: 12
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Session not found"
+
+    # WebSocket Message Schemas
+    WsJoinMessage:
+      type: object
+      required:
+        - type
+        - sessionId
+        - name
+      properties:
+        type:
+          type: string
+          enum: [join]
+        sessionId:
+          type: string
+          example: "interview-123"
+        name:
+          type: string
+          example: "John Doe"
+
+    WsCodeUpdateMessage:
+      type: object
+      required:
+        - type
+        - code
+      properties:
+        type:
+          type: string
+          enum: [code_update]
+        code:
+          type: string
+          example: "function solution(input) {\n  return input * 2;\n}"
+
+    WsLanguageChangeMessage:
+      type: object
+      required:
+        - type
+        - language
+      properties:
+        type:
+          type: string
+          enum: [language_change]
+        language:
+          type: string
+          enum:
+            - javascript
+            - typescript
+            - python
+            - java
+            - cpp
+            - csharp
+            - go
+            - rust
+          example: "python"
+
+    WsCursorUpdateMessage:
+      type: object
+      required:
+        - type
+        - line
+        - column
+      properties:
+        type:
+          type: string
+          enum: [cursor_update]
+        line:
+          type: integer
+          example: 5
+        column:
+          type: integer
+          example: 12
+
+    WsSessionStateMessage:
+      type: object
+      required:
+        - type
+        - code
+        - language
+        - participants
+        - myParticipantId
+      properties:
+        type:
+          type: string
+          enum: [session_state]
+        code:
+          type: string
+        language:
+          type: string
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Participant'
+        myParticipantId:
+          type: string
+          format: uuid
+
+    WsParticipantJoinedMessage:
+      type: object
+      required:
+        - type
+        - participant
+      properties:
+        type:
+          type: string
+          enum: [participant_joined]
+        participant:
+          $ref: '#/components/schemas/Participant'
+
+    WsParticipantLeftMessage:
+      type: object
+      required:
+        - type
+        - participantId
+      properties:
+        type:
+          type: string
+          enum: [participant_left]
+        participantId:
+          type: string
+          format: uuid
+
+    WsParticipantCursorMessage:
+      type: object
+      required:
+        - type
+        - participantId
+        - line
+        - column
+      properties:
+        type:
+          type: string
+          enum: [participant_cursor]
+        participantId:
+          type: string
+          format: uuid
+        line:
+          type: integer
+        column:
+          type: integer
+
+    WsErrorMessage:
+      type: object
+      required:
+        - type
+        - message
+      properties:
+        type:
+          type: string
+          enum: [error]
+        message:
+          type: string
+          example: "Invalid message format"
